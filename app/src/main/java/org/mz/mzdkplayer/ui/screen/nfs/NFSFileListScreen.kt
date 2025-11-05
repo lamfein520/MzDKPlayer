@@ -40,8 +40,8 @@ import org.mz.mzdkplayer.tool.Tools.VideoBigIcon
 import org.mz.mzdkplayer.ui.screen.common.FileEmptyScreen
 import org.mz.mzdkplayer.ui.screen.common.LoadingScreen
 import org.mz.mzdkplayer.ui.screen.vm.NFSConViewModel
-
-
+import org.mz.mzdkplayer.ui.screen.vm.NFSConnectionStatus // 假设存在对应的状态类
+import org.mz.mzdkplayer.ui.screen.vm.SMBConnectionStatus
 import org.mz.mzdkplayer.ui.style.myListItemColor
 import java.net.URLEncoder
 
@@ -115,12 +115,12 @@ fun NFSFileListScreen(
                 Toast.makeText(context, "NFS 错误: $errorMessage", Toast.LENGTH_LONG).show()
             }
 
-            is FileConnectionStatus.LoadingFile -> {
+            is NFSConnectionStatus.LoadingFile -> {
                 Log.d("SMBFileListScreen", "正在加载文件...")
                 isLoading = true
             }
 
-            is FileConnectionStatus.FilesLoaded -> {
+            is NFSConnectionStatus.LoadingFiled -> {
                 Log.d("SMBFileListScreen", "文件加载完成")
                 isLoading = false
 
@@ -143,7 +143,7 @@ fun NFSFileListScreen(
             .padding(16.dp)
     ) {
         when (connectionStatus) {
-            is FileConnectionStatus.Connecting -> {
+            is NFSConnectionStatus.Connecting -> {
 //                LoadingScreen(
 //                    "正在连接NFS服务器", Modifier
 //                        .fillMaxSize()
@@ -164,7 +164,7 @@ fun NFSFileListScreen(
                 // 可以添加一个重试按钮
             }
 
-            is FileConnectionStatus.Connected ,is FileConnectionStatus.FilesLoaded-> {
+            is NFSConnectionStatus.Connected ,is NFSConnectionStatus.LoadingFiled-> {
                 if (fileList.isEmpty()&& !isLoading) {
                     FileEmptyScreen("此目录为空")
                     return@Box
@@ -401,7 +401,7 @@ fun NFSFileListScreen(
                 }
             }
 
-            FileConnectionStatus.LoadingFile -> {
+            NFSConnectionStatus.LoadingFile -> {
                 LoadingScreen(
                     "正在加载NFS文件",
                     Modifier
