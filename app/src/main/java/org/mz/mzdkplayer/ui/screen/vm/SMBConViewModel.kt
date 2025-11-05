@@ -121,21 +121,29 @@ class SMBConViewModel : ViewModel() {
                     // 在 IO 线程执行所有繁重工作
                     val files = withContext(Dispatchers.IO) {
                         try {
-                            val cleanPath = config.path.let {
-                                if (it == "/") "\\" else it.replace("/", "\\").trimEnd('\\')
-                            }
-                            val startTime = System.currentTimeMillis()
-                            val fileList = mutableListOf<SMBFileItem>()
-                            share?.list(cleanPath)
-                                ?.forEach { fileInfo: FileIdBothDirectoryInformation ->
-                                    val fileName = fileInfo.fileName
-                                    if (fileName != "." && fileName != "..") {
-                                        val isDirectory = isDirectory(fileInfo.fileAttributes)
-                                        val filePath = if (cleanPath == "\\") {
-                                            "\\$fileName"
-                                        } else {
-                                            "$cleanPath\\$fileName"
-                                        }
+
+                            try {
+                                _connectionStatus.value = SMBConnectionStatus.LoadingFile
+                                // 确保路径以/开头且不以/结尾（除了根路径）
+                                val cleanPath = config.path.let {
+                                    if (it == "/") "\\" else it.replace("/", "\\").trimEnd('\\')
+                                }
+
+                                val files = mutableListOf<SMBFileItem>()
+
+                                share?.list(cleanPath)
+                                    ?.forEach { fileInfo: FileIdBothDirectoryInformation ->
+                                        val fileName = fileInfo.fileName
+                                        // 跳过当前目录和父目录
+                                        if (fileName != "." && fileName != ".." &&
+                                            !isHidden(fileInfo.fileAttributes, fileName)
+                                        ) {
+                                            val isDirectory = isDirectory(fileInfo.fileAttributes)
+                                            val filePath = if (cleanPath == "\\") {
+                                                "\\$fileName"
+                                            } else {
+                                                "$cleanPath\\$fileName"
+                                            }
 
                                         fileList.add(
                                             SMBFileItem(
@@ -257,6 +265,12 @@ class SMBConViewModel : ViewModel() {
     fun isDirectory(fileAttributes: Long): Boolean {
         return (fileAttributes and FileAttributes.FILE_ATTRIBUTE_DIRECTORY.value) != 0L
     }
+
+    private fun isHidden(fileAttributes: Long, fileName: String): Boolean {
+        val hiddenByAttr =
+            (fileAttributes and FileAttributes.FILE_ATTRIBUTE_HIDDEN.value) != 0L
+        return hiddenByAttr || fileName.startsWith(".")
+    }
 }
 
 // --- 状态枚举 ---
@@ -279,6 +293,5 @@ data class SMBFileItem(
     val username: String,
     val password: String
 )
-
 
 
