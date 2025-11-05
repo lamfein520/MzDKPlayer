@@ -31,6 +31,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.mz.mzdkplayer.MzDkPlayerApplication
 import org.mz.mzdkplayer.R
@@ -74,30 +75,54 @@ fun HTTPLinkFileListScreen(
     var focusedIsDir by remember { mutableStateOf(false) }
     var focusedMediaUri by remember { mutableStateOf("") }
     // 当传入的 serverAddressAndShare, effectiveSubPath 参数变化时，或者首次进入时，尝试加载文件列表
-    var seaText by remember { mutableStateOf("") }
-    //  新增：过滤后的文件列表
-    val filteredFiles by remember(fileList, seaText) {
-        derivedStateOf {
-            if (seaText.isBlank()) {
-                fileList
-            } else {
-                fileList.filter { file ->
-                    file.name.contains(seaText, ignoreCase = true)
+    LaunchedEffect(serverAddressAndShare, effectiveSubPath) {
+        Log.d(
+            "HTTPLinkFileListScreen",
+            "LaunchedEffect triggered with serverAddressAndShare: $serverAddressAndShare, subPath: $effectiveSubPath, status: $connectionStatus, hasAttempted: $hasAttemptedInitialLoad, lastPath: $lastAttemptedPath"
+        )
+
+        if (!hasAttemptedInitialLoad || lastAttemptedPath != effectiveSubPath) {
+            Log.d(
+                "HTTPLinkFileListScreen",
+                "Initial load or path change detected. Attempting action."
+            )
+            hasAttemptedInitialLoad = true
+            lastAttemptedPath = effectiveSubPath
+
+            when (connectionStatus) {
+                is HTTPLinkConnectionStatus.Connected -> {
+                    delay(300)
+                    // 已连接，直接尝试列出指定路径
+                    Log.d(
+                        "HTTPLinkFileListScreen",
+                        "Already connected, listing files for path: $effectiveSubPath"
+                    )
+                    viewModel.listFiles(effectiveSubPath)
+                }
+
+                is HTTPLinkConnectionStatus.Disconnected,
+                is HTTPLinkConnectionStatus.Error -> {
+                    // 未连接或之前有错误，尝试连接到根路径
+                    Log.d(
+                        "HTTPLinkFileListScreen",
+                        "Disconnected/Error or first load. Attempting to connect to root: $serverAddressAndShare"
+                    )
+                    viewModel.connectToHTTPLink(serverAddressAndShare)
+                    // 连接成功后，LaunchedEffect 会再次触发，届时会检查路径并加载
+                }
+
+                is HTTPLinkConnectionStatus.Connecting -> {
+
+                    // 正在连接，等待...
+                    Log.d(
+                        "HTTPLinkFileListScreen",
+                        "Currently connecting, waiting for status change..."
+                    )
                 }
             }
+        } else {
+            Log.d("HTTPLinkFileListScreen", "No new load needed, state matches.")
         }
-    }
-    // 标准化 path：确保非空时以 "/" 结尾
-    val normalizedPath = path?.let { p ->
-        if (p.endsWith("/")) p else "$p/"
-    }
-
-    // 如果 normalizedPath 为 null，可以提前返回或显示错误
-    if (normalizedPath == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("无效的路径", color = Color.Red)
-        }
-        return
     }
 
     // 专门监听连接状态变化，连接成功后检查是否需要导航到初始子路径

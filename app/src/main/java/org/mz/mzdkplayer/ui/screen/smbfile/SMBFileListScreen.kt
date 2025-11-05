@@ -46,6 +46,7 @@ import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.mz.mzdkplayer.MzDkPlayerApplication
 import org.mz.mzdkplayer.R
@@ -79,19 +80,14 @@ fun SMBFileListScreen(path: String?, navController: NavHostController) {
     var focusedIsDir by remember { mutableStateOf(true) }
     var focusedMediaUri by remember { mutableStateOf("") }
     var exoPlayer: ExoPlayer? by remember { mutableStateOf(null) }
-    var seaText by remember { mutableStateOf("") }
-    //  新增：过滤后的文件列表
-    val filteredFiles by remember(files, seaText) {
-        derivedStateOf {
-            if (seaText.isBlank()) {
-                files
-            } else {
-                files.filter { file ->
-                    file.name.contains(seaText, ignoreCase = true)
-                }
-            }
-        }
-    }
+    var seaText: String by remember { mutableStateOf("") }
+
+    // 过滤后的文件列表
+    var filteredFiles by remember { mutableStateOf(emptyList<FileListItemData>()) }
+    // 是否正在加载
+    var isLoading by remember { mutableStateOf(true) }
+    // 添加首次加载标志
+    var isFirstLoad by remember { mutableStateOf(true) }
     // 处理路径变化和连接状态
     LaunchedEffect(path, connectionStatus) {
         val decodedPath = try {
@@ -127,7 +123,8 @@ fun SMBFileListScreen(path: String?, navController: NavHostController) {
                 )
             }
 
-            is FileConnectionStatus.Connected -> {
+            is SMBConnectionStatus.Connected -> {
+                delay(300)
                 Log.d("SMBFileListScreen", "已连接，列出文件: ${smbConfig.path}")
                 viewModel.listSMBFiles(smbConfig)
             }
@@ -144,6 +141,10 @@ fun SMBFileListScreen(path: String?, navController: NavHostController) {
 
             is FileConnectionStatus.FilesLoaded -> {
                 Log.d("SMBFileListScreen", "文件加载完成")
+                isLoading = false
+                if (isFirstLoad) {
+                    isFirstLoad = false
+                }
             }
 
             is FileConnectionStatus.Connecting -> {
@@ -164,25 +165,25 @@ fun SMBFileListScreen(path: String?, navController: NavHostController) {
                 Log.d("SMBFileListScreen", "准备播放视频: $focusedFileName")
 
                 try {
-                    exoPlayer = withContext(Dispatchers.Main) {
-                        builderPlayer(mediaUri = focusedMediaUri, context, dataSourceType = "SMB")
-                    }
+//                    exoPlayer = withContext(Dispatchers.Main) {
+//                        builderPlayer(mediaUri = focusedMediaUri, context, dataSourceType = "SMB")
+//                    }
 
-                    withContext(Dispatchers.Main) {
-                        setupPlayer(
-                            exoPlayer!!,
-                            focusedMediaUri,
-                            "SMB",
-                            context,
-                            { mediaInfoMap ->
-                                Log.d("SMBFileListScreen", "媒体信息: $mediaInfoMap")
-                            },
-                            onError = { errorMessage ->
-                                Log.e("SMBFileListScreen", "播放错误: $errorMessage")
-                                //Toast.makeText(context, "播放错误: $errorMessage", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
+//                    withContext(Dispatchers.Main) {
+//                        setupPlayer(
+//                            exoPlayer!!,
+//                            focusedMediaUri,
+//                            "SMB",
+//                            context,
+//                            { mediaInfoMap ->
+//                                Log.d("SMBFileListScreen", "媒体信息: $mediaInfoMap")
+//                            },
+//                            onError = { errorMessage ->
+//                                Log.e("SMBFileListScreen", "播放错误: $errorMessage")
+//                                //Toast.makeText(context, "播放错误: $errorMessage", Toast.LENGTH_SHORT).show()
+//                            }
+//                        )
+//                    }
                 } catch (e: Exception) {
                     Log.e("SMBFileListScreen", "播放器初始化失败: ${e.message}", e)
                     // Toast.makeText(context, "播放器初始化失败", Toast.LENGTH_SHORT).show()
@@ -199,320 +200,158 @@ fun SMBFileListScreen(path: String?, navController: NavHostController) {
             viewModel.disconnectSMB()
         }
     }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color.Black) // 👈 先铺满黑色背景
     ) {
-        when (connectionStatus) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()// 👈 防止底层界面透出
+                .padding(16.dp)
+        ) {
+            when (connectionStatus) {
+                is SMBConnectionStatus.Connecting -> {
 
-            is FileConnectionStatus.FilesLoaded -> {
-                if (files.isEmpty()) {
+//                LoadingScreen(
+//                    "正在连接SMB服务器",
+//                    Modifier
+//                        .fillMaxSize()
+//                        .background(Color.Black)
+//                )
+                }
 
-                    FileEmptyScreen("此目录为空")
 
-                } else {
-                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .padding(10.dp)
-                                .fillMaxHeight()
-                                .weight(0.7f)
+                is SMBConnectionStatus.Connected, is SMBConnectionStatus.LoadingFiled -> {
+                    if (files.isEmpty() && !isLoading) {
+                        FileEmptyScreen("此目录为空")
+                        return@Box
+                    }
+                    if (isLoading) {
+                        LoadingScreen(
+                            "正在加载SMB文件",
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                        )
+                    } else {
+                        Row(
+                            Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            when {
-                                // 搜索无结果
-                                filteredFiles.isEmpty() && seaText.isNotBlank() -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .fillMaxHeight()
+                                    .weight(0.7f)
+                            ) {
+                                if (filteredFiles.isEmpty() && seaText.isNotEmpty()) {
+                                    // 显示搜索结果为空的提示
                                     item {
-                                        NoSearchResult(text = "没有匹配 \"$seaText\" 的文件")
-                                    }
-                                }
-
-                                // 目录本身为空（未搜索时）
-
-                                else -> {
-                                    items(filteredFiles) { file ->
-                                        ListItem(
-                                            selected = false,
-
-                                            onClick = {
-                                                if (file.isDirectory) {
-                                                    // 导航到子目录
-                                                    val newPath = viewModel.buildSMBPath(
-                                                        file.server,
-                                                        file.share,
-                                                        file.fullPath,
-                                                        file.username,
-                                                        file.password
-                                                    )
-                                                    val encodedPath = try {
-                                                        URLEncoder.encode(newPath, "UTF-8")
-                                                    } catch (e: Exception) {
-                                                        Log.e(
-                                                            "SMBFileListScreen",
-                                                            "路径编码失败: $e"
-                                                        )
-                                                        Toast.makeText(
-                                                            context,
-                                                            "路径编码失败",
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
-
-                                                    }
-                                                    navController.navigate("SMBFileListScreen/$encodedPath")
-                                                } else {
-                                                    // 处理文件点击
-                                                    val fileExtension =
-                                                        Tools.extractFileExtension(file.name)
-
-                                                    when {
-                                                        Tools.containsVideoFormat(fileExtension) -> {
-                                                            val encodedUri = try {
-                                                                URLEncoder.encode(
-                                                                    "smb://${file.username}:${file.password}@${file.server}/${file.share}${file.fullPath}",
-                                                                    "UTF-8"
-                                                                )
-                                                            } catch (e: Exception) {
-                                                                Log.e(
-                                                                    "SMBFileListScreen",
-                                                                    "视频URI编码失败: $e"
-                                                                )
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "视频路径编码失败",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                                return@ListItem
-
-                                                            }
-                                                            val encodedFileName = try {
-                                                                URLEncoder.encode(
-                                                                    file.name,
-                                                                    "UTF-8"
-                                                                )
-                                                            } catch (e: Exception) {
-                                                                Log.e(
-                                                                    "SMBFileListScreen",
-                                                                    "文件名编码失败: $e"
-                                                                )
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "文件名编码失败",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                                return@ListItem
-
-                                                            }
-                                                            navController.navigate("VideoPlayer/$encodedUri/SMB/$encodedFileName")
-                                                        }
-
-                                                        Tools.containsAudioFormat(fileExtension) -> {
-                                                            //  构建音频文件列表
-                                                            val audioFiles =
-                                                                files.filter { smbFile ->
-                                                                    Tools.containsAudioFormat(
-                                                                        Tools.extractFileExtension(
-                                                                            smbFile.name
-                                                                        )
-                                                                    )
-                                                                }
-
-                                                            //  构建文件名到索引的映射（O(N) 一次构建）
-                                                            val nameToIndexMap =
-                                                                audioFiles.withIndex()
-                                                                    .associateBy(
-                                                                        { it.value.name },
-                                                                        { it.index })
-
-                                                            //  快速查找索引（O(1)）
-                                                            val currentAudioIndex =
-                                                                nameToIndexMap[file.name] ?: -1
-                                                            if (currentAudioIndex == -1) {
-                                                                Log.e(
-                                                                    "SMBFileListScreen",
-                                                                    "未找到文件在音频列表中: ${file.name}"
-                                                                )
-                                                                return@ListItem
-
-                                                            }
-
-                                                            //  构建播放列表
-                                                            val audioItems =
-                                                                audioFiles.map { smbFile ->
-                                                                    AudioItem(
-                                                                        uri = "smb://${smbFile.username}:${smbFile.password}@${smbFile.server}/${smbFile.share}${smbFile.fullPath}",
-                                                                        fileName = smbFile.name,
-                                                                        dataSourceType = "SMB"
-                                                                    )
-                                                                }
-
-                                                            // 设置数据
-                                                            MzDkPlayerApplication.clearStringList("audio_playlist")
-                                                            MzDkPlayerApplication.setStringList(
-                                                                "audio_playlist",
-                                                                audioItems
-                                                            )
-
-                                                            val encodedUri = try {
-                                                                URLEncoder.encode(
-                                                                    "smb://${file.username}:${file.password}@${file.server}/${file.share}${file.fullPath}",
-                                                                    "UTF-8"
-                                                                )
-                                                            } catch (e: Exception) {
-                                                                Log.e(
-                                                                    "SMBFileListScreen",
-                                                                    "音频URI编码失败: $e"
-                                                                )
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "音频路径编码失败",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                                return@ListItem
-                                                            }
-
-                                                            val encodedFileName = try {
-                                                                URLEncoder.encode(
-                                                                    file.name,
-                                                                    "UTF-8"
-                                                                )
-                                                            } catch (e: Exception) {
-                                                                Log.e(
-                                                                    "SMBFileListScreen",
-                                                                    "文件名编码失败: $e"
-                                                                )
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "文件名编码失败",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
-                                                                return@ListItem
-                                                            }
-
-                                                            //  传递当前音频项在播放列表中的索引
-                                                            navController.navigate("AudioPlayer/$encodedUri/SMB/$encodedFileName/$currentAudioIndex")
-                                                        }
-
-                                                        else -> {
-                                                            Toast.makeText(
-                                                                context,
-                                                                "不支持的文件格式: $fileExtension",
-                                                                Toast.LENGTH_SHORT
-                                                            ).show()
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            colors = myListItemColor(),
+                                        Box(
                                             modifier = Modifier
-                                                .padding(end = 10.dp)
-                                                .height(40.dp)
-                                                .onFocusChanged { focusState ->
-                                                    if (focusState.isFocused) {
-                                                        focusedFileName = file.name
-                                                        focusedIsDir = file.isDirectory
-                                                        focusedMediaUri =
-                                                            "smb://${file.username}:${file.password}@${file.server}/${file.share}${file.fullPath}"
-                                                        Log.d(
-                                                            "SMBFileListScreen",
-                                                            "焦点变化: ${file.name}, 是目录: $focusedIsDir"
-                                                        )
-                                                    }
-                                                },
-                                            scale = ListItemDefaults.scale(
-                                                scale = 1.0f,
-                                                focusedScale = 1.01f
-                                            ),
-                                            leadingContent = {
-                                                Icon(
-                                                    painter = when {
-                                                        file.isDirectory -> painterResource(R.drawable.baseline_folder_24)
-                                                        Tools.containsVideoFormat(
-                                                            Tools.extractFileExtension(
-                                                                file.name
-                                                            )
-                                                        ) ->
-                                                            painterResource(R.drawable.moviefileicon)
-
-                                                        Tools.containsAudioFormat(
-                                                            Tools.extractFileExtension(
-                                                                file.name
-                                                            )
-                                                        ) ->
-                                                            painterResource(R.drawable.baseline_music_note_24)
-
-                                                        else -> painterResource(R.drawable.baseline_insert_drive_file_24)
-                                                    },
-                                                    contentDescription = null
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "搜索结果为空",
+                                                color = Color.White,
+                                                fontSize = 16.sp,
+                                                modifier = Modifier.padding(8.dp)
+                                            )
+                                        }
+                                    }
+                                } else if (!isLoading) {
+                                    // 显示过滤后的文件列表
+                                    items(filteredFiles) { file ->
+                                        CommonFileListItem(
+                                            file,
+                                            context = context,
+                                            navController,
+                                            onFocused = {
+                                                focusedFileName = file.fileName
+                                                focusedIsDir = file.isDirectory
+                                                focusedMediaUri =
+                                                    file.filePath // 因为它已经是 smb://... 形式
+                                                Log.d(
+                                                    "SMBFileListScreen",
+                                                    "焦点变化: ${file.fileName}, 是目录: $focusedIsDir"
                                                 )
-                                            },
-                                            headlineContent = {
-                                                Text(
-                                                    file.name,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    fontSize = 10.sp
-                                                )
-                                            }
-                                        )
-
-
+                                            })
                                     }
                                 }
                             }
 
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .weight(0.3f),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            TvTextField(
-                                value = seaText,
-                                onValueChange = { seaText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = myTTFColor(),
-                                placeholder = "请输入文件名",
-                                textStyle = TextStyle(color = Color.White),
-                            )
-                            VideoBigIcon(
-                                focusedIsDir,
-                                focusedFileName,
+                            Column(
                                 modifier = Modifier
-                                    .height(200.dp)
-                                    .fillMaxWidth()
-                            )
-                            focusedFileName?.let { fileName ->
-                                Text(
-                                    fileName,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp,
-                                    modifier = Modifier.padding(start = 8.dp)
+                                    .fillMaxHeight()
+                                    .weight(0.3f),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                TvTextField(
+                                    seaText,
+                                    onValueChange = { seaText = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = "请输入文件名",
+                                    colors = myTTFColor(),
+                                    textStyle = TextStyle(color = Color.White)
                                 )
+                                VideoBigIcon(
+                                    focusedIsDir,
+                                    focusedFileName,
+                                    modifier = Modifier
+                                        .height(200.dp)
+                                        .fillMaxWidth()
+                                )
+                                focusedFileName?.let { fileName ->
+                                    Text(
+                                        fileName,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            is FileConnectionStatus.Error -> {
-                val errorMessage = (connectionStatus as FileConnectionStatus.Error).message
-                VAErrorScreen(
-                    "加载失败: $errorMessage",
-                )
-            }
+                SMBConnectionStatus.Disconnected -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "未连接到 SMB 服务器",
+                            color = Color.White,
+                            fontSize = 20.sp
+                        )
+                        // 可以添加连接按钮
+                    }
+                }
 
-            else -> {
-                LoadingScreen(
-                    "正在连接SMB服务器",
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                )
+                is SMBConnectionStatus.Error -> {
+                    val errorMessage = (connectionStatus as SMBConnectionStatus.Error).message
+                    Text(
+                        "加载失败: $errorMessage",
+                        modifier = Modifier.align(Alignment.Center),
+                        color = Color.Red,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+
+                SMBConnectionStatus.LoadingFile -> {
+                    LoadingScreen(
+                        "正在加载SMB文件",
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    )
+                }
             }
         }
     }

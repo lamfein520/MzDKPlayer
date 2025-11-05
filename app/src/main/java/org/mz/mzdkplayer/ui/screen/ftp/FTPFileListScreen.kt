@@ -29,6 +29,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.mz.mzdkplayer.MzDkPlayerApplication
 import org.mz.mzdkplayer.R
@@ -90,8 +91,8 @@ fun FTPFileListScreen(
         )
 
         when (connectionStatus) {
-            is FileConnectionStatus.Connected -> {
-
+            is FTPConnectionStatus.Connected -> {
+                delay(300)
                 // 已连接，可以安全地列出文件
                 Log.d("FTPFileListScreen", "Already connected, listing files for path: $path")
                 viewModel.listFiles(path ?: "")

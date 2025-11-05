@@ -44,6 +44,7 @@ import androidx.tv.material3.ListItem
 import androidx.tv.material3.ListItemDefaults
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.delay
 import org.mz.mzdkplayer.MzDkPlayerApplication
 import org.mz.mzdkplayer.R
 import org.mz.mzdkplayer.logic.model.AudioItem
@@ -81,7 +82,7 @@ fun LocalFileScreen(path: String?, navController: NavHostController) {
         }
     }
     LaunchedEffect(path) {
-        status = LocalFileLoadStatus.LoadingFile
+        delay(300)
         files.clear()
         delay(300)
 
