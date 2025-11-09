@@ -123,7 +123,6 @@ class SMBConViewModel : ViewModel() {
                     // 在 IO 线程执行所有繁重工作
                     val files = withContext(Dispatchers.IO) {
                         try {
-                            _connectionStatus.value = FileConnectionStatus.LoadingFile
                             // 确保路径以/开头且不以/结尾（除了根路径）
                             val cleanPath = config.path.let {
                                 if (it == "/") "\\" else it.replace("/", "\\").trimEnd('\\')
@@ -134,7 +133,8 @@ class SMBConViewModel : ViewModel() {
                                 ?.forEach { fileInfo: FileIdBothDirectoryInformation ->
                                     val fileName = fileInfo.fileName
                                     if (fileName != "." && fileName != ".." &&
-                                            !isHidden(fileInfo.fileAttributes, fileName) {
+                                        !isHidden(fileInfo.fileAttributes, fileName)
+                                    ) {
                                         val isDirectory = isDirectory(fileInfo.fileAttributes)
                                         val filePath = if (cleanPath == "\\") {
                                             "\\$fileName"
@@ -314,5 +314,4 @@ data class SMBFileItem(
     val username: String,
     val password: String
 )
-
 
