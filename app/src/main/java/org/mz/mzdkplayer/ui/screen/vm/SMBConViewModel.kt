@@ -106,24 +106,21 @@ class SMBConViewModel : ViewModel() {
 
     fun listSMBFiles(config: SMBConfig) {
         viewModelScope.launch {
-            if (_connectionStatus.value != SMBConnectionStatus.Connected) {
-                _connectionStatus.value = SMBConnectionStatus.Error("未连接到服务器")
+            if (_connectionStatus.value != FileConnectionStatus.Connected &&
+                _connectionStatus.value !is FileConnectionStatus.FilesLoaded) {
+                _connectionStatus.value = FileConnectionStatus.Error("未连接")
                 return@launch
             }
-
 
             Log.d("listSMBFiles", "正在列出文件")
             mutex.withLock {
                 try {
                     // 只更新一次状态为加载中
-                    _connectionStatus.value = SMBConnectionStatus.LoadingFile
+                    _connectionStatus.value = FileConnectionStatus.LoadingFile
 
                     // 在 IO 线程执行所有繁重工作
                     val files = withContext(Dispatchers.IO) {
-                    // 在 IO 线程执行所有繁重工作
-                    val files = withContext(Dispatchers.IO) {
                         try {
-                            // 确保路径以/开头且不以/结尾（除了根路径）
                             val cleanPath = config.path.let {
                                 if (it == "/") "\\" else it.replace("/", "\\").trimEnd('\\')
                             }
@@ -134,7 +131,7 @@ class SMBConViewModel : ViewModel() {
                                     val fileName = fileInfo.fileName
                                     if (fileName != "." && fileName != ".." &&
                                         !isHidden(fileInfo.fileAttributes, fileName)
-                                    ) {
+                                        ) {
                                         val isDirectory = isDirectory(fileInfo.fileAttributes)
                                         val filePath = if (cleanPath == "\\") {
                                             "\\$fileName"
@@ -165,42 +162,18 @@ class SMBConViewModel : ViewModel() {
                             Log.d("Performance", "排序耗时: ${sortTime - getFilesTime}ms")
 
                             sortedList
-                                        fileList.add(
-                                            SMBFileItem(
-                                                name = fileName,
-                                                fullPath = filePath.replace("\\", "/"),
-                                                isDirectory = isDirectory,
-                                                server = config.server,
-                                                share = config.share,
-                                                username = config.username,
-                                                password = config.password,
-                                            )
-                                        )
-                                    }
-                                } ?: throw Exception("SMB 客户端未初始化或连接失败")
-                            val getFilesTime = System.currentTimeMillis()
-                            Log.d("Performance", "获取文件耗时: ${getFilesTime - startTime}ms")
-
-
-                            // 排序
-                            val sortedList = fileList.sortedBy { it.name }
-                            val sortTime = System.currentTimeMillis()
-                            Log.d("Performance", "排序耗时: ${sortTime - getFilesTime}ms")
-
-                            sortedList
                         } finally {
-                            share?.close()
-                            connection?.close()
+
                         }
                     }
 
                     // 一次性更新最终状态
                     _fileList.value = files
-                    _connectionStatus.value = SMBConnectionStatus.LoadingFiled
+                    _connectionStatus.value = FileConnectionStatus.FilesLoaded
 
                 } catch (e: Exception) {
                     Log.e("SMBConViewModel", "连接失败", e)
-                    _connectionStatus.value = SMBConnectionStatus.Error("连接失败: ${e.message}")
+                    _connectionStatus.value = FileConnectionStatus.Error("连接失败: ${e.message}")
                     disconnectSMB()
                 }
             }
